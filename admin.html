@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light only" />
+<title>Crochet Corner — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#FFFFFF; --cream:#FEF7F9; --ink:#3A2328; --muted:#9E7580;
+    --pink:#F2A9BE; --cherry:#C13B52; --cherry2:#A32B42; --soft:#FBE6EC;
+    --line:#F3DBE2; --ok:#3D8B5F; --warn:#C88A2E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--cream);color:var(--ink);font-family:"Quicksand",system-ui,sans-serif;line-height:1.5}
+  button,input,select,textarea{font-family:inherit}
+  a{color:inherit}
+
+  /* ---------- Login screen ---------- */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-box{background:#fff;border-radius:20px;padding:40px 36px;max-width:380px;width:100%;box-shadow:0 20px 50px -20px rgba(193,59,82,.25)}
+  .login-box h1{font-family:"Playfair Display",serif;color:var(--cherry);font-size:26px;margin-bottom:6px}
+  .login-box p{color:var(--muted);font-size:13.5px;margin-bottom:24px}
+
+  /* ---------- Layout ---------- */
+  .app{display:none;min-height:100vh;grid-template-columns:220px 1fr}
+  .app.active{display:grid}
+  @media(max-width:800px){.app.active{grid-template-columns:1fr}}
+  .sidebar{background:#fff;border-right:1px solid var(--line);padding:26px 18px;display:flex;flex-direction:column}
+  @media(max-width:800px){.sidebar{position:fixed;top:0;bottom:0;left:0;width:220px;z-index:50;transform:translateX(-100%);transition:.25s}
+    .sidebar.open{transform:translateX(0)}}
+  .sidebar .brand{font-family:"Playfair Display",serif;color:var(--cherry);font-size:21px;font-weight:600;margin-bottom:28px;padding:0 8px}
+  .sidebar nav{display:flex;flex-direction:column;gap:4px;flex:1}
+  .sidebar nav button{text-align:left;background:none;border:none;padding:11px 12px;border-radius:10px;font-size:14px;font-weight:500;
+    color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:10px}
+  .sidebar nav button:hover{background:var(--cream)}
+  .sidebar nav button.active{background:var(--soft);color:var(--cherry2);font-weight:700}
+  .sidebar .signout{margin-top:auto;background:none;border:none;color:var(--muted);font-size:13px;padding:11px 12px;text-align:left;cursor:pointer}
+  .mobile-bar{display:none;background:#fff;border-bottom:1px solid var(--line);padding:14px 18px;align-items:center;justify-content:space-between}
+  @media(max-width:800px){.mobile-bar{display:flex}}
+  .mobile-bar button{background:none;border:none;font-size:20px;color:var(--cherry)}
+
+  .main{padding:32px 36px;max-width:980px}
+  @media(max-width:800px){.main{padding:20px}}
+  .pagehead{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:26px}
+  .pagehead h1{font-family:"Playfair Display",serif;font-size:26px;font-weight:600}
+
+  .btn{border:none;border-radius:999px;padding:11px 20px;font-size:13.5px;font-weight:700;cursor:pointer;transition:.15s}
+  .btn-cherry{background:var(--cherry);color:#fff}
+  .btn-cherry:hover{background:var(--cherry2)}
+  .btn-ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--cherry);color:var(--cherry)}
+  .btn-danger{background:#fff;border:1.5px solid #eecdd3;color:var(--cherry2)}
+  .btn-danger:hover{background:#fdeef1}
+  .btn-sm{padding:7px 14px;font-size:12.5px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  .card{background:#fff;border-radius:16px;border:1px solid var(--line);padding:22px;margin-bottom:16px}
+  .table{width:100%;border-collapse:collapse}
+  .table th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    padding:0 12px 10px;border-bottom:1px solid var(--line)}
+  .table td{padding:12px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+  .table tr:last-child td{border-bottom:none}
+  .thumb{width:42px;height:42px;border-radius:8px;object-fit:cover;background:var(--soft)}
+  .pill{display:inline-block;padding:4px 11px;border-radius:999px;font-size:11.5px;font-weight:700;text-transform:capitalize}
+  .pill-pending{background:#fdf2df;color:var(--warn)}
+  .pill-confirmed{background:#e3edff;color:#3358c9}
+  .pill-shipped{background:#e6ecff;color:#5a4fd6}
+  .pill-completed{background:#e2f4e9;color:var(--ok)}
+  .pill-cancelled{background:#fbe6ea;color:var(--cherry2)}
+  .pill-instock{background:#e2f4e9;color:var(--ok)}
+  .pill-oos{background:#f2f2f2;color:var(--muted)}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:14px}
+  .loading{text-align:center;padding:50px 20px;color:var(--muted);font-size:14px}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(58,35,40,.4);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+  .overlay.active{display:flex}
+  .modal{background:#fff;border-radius:18px;max-width:520px;width:100%;padding:28px}
+  .modal h2{font-family:"Playfair Display",serif;font-size:21px;margin-bottom:18px}
+  .field{margin-bottom:15px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
+  .field input,.field textarea,.field select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14px}
+  .field textarea{resize:vertical;min-height:70px}
+  .field-row{display:flex;gap:12px}
+  .field-row .field{flex:1}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  .checkbox-row{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:15px}
+  .checkbox-row input{width:auto}
+  .err-msg{color:var(--cherry2);font-size:13px;margin-top:10px}
+  .imgpreview{width:100%;aspect-ratio:1/1;border-radius:12px;background:var(--soft);object-fit:cover;margin-bottom:10px;max-width:180px}
+
+  .order-detail{margin-top:8px}
+  .order-detail table{width:100%;font-size:13px;margin:10px 0}
+  .order-detail td{padding:4px 0}
+  .settings-grid{display:grid;gap:14px;max-width:480px}
+  .drag-handle{cursor:grab;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="login-wrap" id="login-screen">
+  <div class="login-box">
+    <h1>Crochet Corner</h1>
+    <p>Admin sign in</p>
+    <div class="field">
+      <label>Email</label>
+      <input id="login-email" type="email" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="login-password" type="password" placeholder="••••••••" />
+    </div>
+    <button class="btn btn-cherry" style="width:100%" id="login-btn" onclick="doLogin()">Sign in</button>
+    <div class="err-msg" id="login-err" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">Crochet Corner</div>
+    <nav>
+      <button data-view="products" onclick="switchView('products')">🧶 Products</button>
+      <button data-view="categories" onclick="switchView('categories')">📂 Categories</button>
+      <button data-view="orders" onclick="switchView('orders')">📦 Orders</button>
+      <button data-view="settings" onclick="switchView('settings')">⚙️ Settings</button>
+    </nav>
+    <button class="signout" onclick="doLogout()">Sign out</button>
+  </aside>
+
+  <div>
+    <div class="mobile-bar">
+      <button onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+      <div class="brand" style="font-family:'Playfair Display',serif;color:var(--cherry);font-weight:600">Crochet Corner Admin</div>
+      <span></span>
+    </div>
+    <main class="main" id="main"></main>
+  </div>
+</div>
+
+<div class="overlay" id="modal-overlay">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const SUPABASE_URL = "https://zvpnisvaarolygzuycgd.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2cG5pc3ZhYXJvbHlnenV5Y2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MTUwMjgsImV4cCI6MjEwMTA5MTAyOH0.-nkEFzUbDjc8xEdU_J_DwZzGyCT2Bp2-4KzozO3T5R8";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let CATEGORIES = [];
+let PRODUCTS = [];
+let ORDERS = [];
+let SETTINGS = {};
+let currentView = "products";
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+async function checkSession(){
+  const { data } = await sb.auth.getSession();
+  if(data.session){
+    showApp();
+  }else{
+    showLogin();
+  }
+}
+async function doLogin(){
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const btn = document.getElementById("login-btn");
+  const err = document.getElementById("login-err");
+  err.style.display = "none";
+  if(!email || !password){
+    err.textContent = "Enter your email and password.";
+    err.style.display = "block";
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  btn.textContent = "Sign in";
+  if(error){
+    err.textContent = "Incorrect email or password.";
+    err.style.display = "block";
+    return;
+  }
+  showApp();
+}
+async function doLogout(){
+  await sb.auth.signOut();
+  showLogin();
+}
+function showLogin(){
+  document.getElementById("login-screen").style.display = "flex";
+  document.getElementById("app").classList.remove("active");
+}
+function showApp(){
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").classList.add("active");
+  loadAllData();
+}
+
+sb.auth.onAuthStateChange((event) => {
+  if(event === "SIGNED_OUT") showLogin();
+});
+
+/* ============================================================
+   DATA LOADING
+   ============================================================ */
+async function loadAllData(){
+  await Promise.all([loadCategories(), loadProducts(), loadOrders(), loadSettings()]);
+  switchView(currentView);
+}
+async function loadCategories(){
+  const { data, error } = await sb.from("categories").select("*").order("sort_order");
+  if(!error) CATEGORIES = data;
+}
+async function loadProducts(){
+  const { data, error } = await sb.from("products").select("*").order("sort_order");
+  if(!error) PRODUCTS = data;
+}
+async function loadOrders(){
+  const { data, error } = await sb.from("orders").select("*, order_items(*)").order("created_at", { ascending: false });
+  if(!error) ORDERS = data;
+}
+async function loadSettings(){
+  const { data, error } = await sb.from("shop_settings").select("*");
+  if(!error){ SETTINGS = {}; data.forEach(s => SETTINGS[s.key] = s.value); }
+}
+
+function imgUrl(path){
+  if(!path) return "";
+  const { data } = sb.storage.from("product-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+function money(n){
+  return (SETTINGS.currency || "PKR") + " " + Number(n).toLocaleString();
+}
+function escapeHtml(s){
+  return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* ============================================================
+   VIEW SWITCHING
+   ============================================================ */
+function switchView(view){
+  currentView = view;
+  document.querySelectorAll(".sidebar nav button").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  document.getElementById("sidebar").classList.remove("open");
+  if(view === "products") renderProducts();
+  else if(view === "categories") renderCategories();
+  else if(view === "orders") renderOrders();
+  else if(view === "settings") renderSettings();
+}
+
+/* ============================================================
+   PRODUCTS
+   ============================================================ */
+function renderProducts(){
+  const rows = PRODUCTS.map(p => {
+    const cat = CATEGORIES.find(c => c.id === p.category_id);
+    return `
+      <tr>
+        <td>${p.image_path ? `<img class="thumb" src="${imgUrl(p.image_path)}">` : `<div class="thumb"></div>`}</td>
+        <td><strong>${escapeHtml(p.name)}</strong></td>
+        <td>${escapeHtml(cat ? cat.name : "—")}</td>
+        <td>${money(p.price)}</td>
+        <td><span class="pill ${p.in_stock ? "pill-instock" : "pill-oos"}">${p.in_stock ? "In stock" : "Out of stock"}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openProductModal('${p.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">Delete</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="pagehead">
+      <h1>Products</h1>
+      <button class="btn btn-cherry" onclick="openProductModal()">+ Add product</button>
+    </div>
+    <div class="card">
+      ${PRODUCTS.length ? `
+        <table class="table">
+          <thead><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty">No products yet. Add your first one!</div>`}
+    </div>`;
+}
+
+function openProductModal(id){
+  const p = id ? PRODUCTS.find(x => x.id === id) : null;
+  const catOptions = CATEGORIES.map(c => `<option value="${c.id}" ${p && p.category_id===c.id ? "selected":""}>${escapeHtml(c.name)}</option>`).join("");
+
+  document.getElementById("modal-body").innerHTML = `
+    <h2>${p ? "Edit product" : "Add product"}</h2>
+    ${p && p.image_path ? `<img class="imgpreview" src="${imgUrl(p.image_path)}">` : ""}
+    <div class="field">
+      <label>Photo</label>
+      <input type="file" id="pf-image" accept="image/*" />
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="pf-name" value="${p ? escapeHtml(p.name) : ""}" placeholder="e.g. Pom Scrunchie — Blush" />
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <select id="pf-category">${catOptions || '<option value="">Add a category first</option>'}</select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Price (${SETTINGS.currency || "PKR"})</label>
+        <input type="number" id="pf-price" value="${p ? p.price : ""}" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label>Badge (optional)</label>
+        <input type="text" id="pf-badge" value="${p && p.badge ? escapeHtml(p.badge) : ""}" placeholder="e.g. Best seller" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea id="pf-desc" placeholder="e.g. Popcorn stitch · blush pink">${p ? escapeHtml(p.description||"") : ""}</textarea>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="pf-instock" ${!p || p.in_stock ? "checked" : ""} />
+      <label style="margin:0;text-transform:none;font-weight:500;font-size:14px" for="pf-instock">In stock</label>
+    </div>
+    <div class="err-msg" id="pf-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-cherry" id="pf-save" onclick="saveProduct('${p ? p.id : ""}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+async function saveProduct(id){
+  const name = document.getElementById("pf-name").value.trim();
+  const categoryId = document.getElementById("pf-category").value;
+  const price = parseFloat(document.getElementById("pf-price").value);
+  const badge = document.getElementById("pf-badge").value.trim();
+  const desc = document.getElementById("pf-desc").value.trim();
+  const inStock = document.getElementById("pf-instock").checked;
+  const file = document.getElementById("pf-image").files[0];
+  const err = document.getElementById("pf-err");
+  const saveBtn = document.getElementById("pf-save");
+
+  err.style.display = "none";
+  if(!name || !categoryId || isNaN(price) || price < 0){
+    err.textContent = "Please fill in name, category, and a valid price.";
+    err.style.display = "block";
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving…";
+
+  try{
+    let imagePath = null;
+    if(file){
+      const ext = file.name.split(".").pop();
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await sb.storage.from("product-images").upload(path, file);
+      if(upErr) throw upErr;
+      imagePath = path;
+    }
+
+    const payload = {
+      name, category_id: categoryId, price, badge: badge || null,
+      description: desc || null, in_stock: inStock
+    };
+    if(imagePath) payload.image_path = imagePath;
+
+    if(id){
+      const { error } = await sb.from("products").update(payload).eq("id", id);
+      if(error) throw error;
+    }else{
+      const { error } = await sb.from("products").insert(payload);
+      if(error) throw error;
+    }
+
+    closeModal();
+    await loadProducts();
+    renderProducts();
+  }catch(e){
+    console.error(e);
+    err.textContent = "Could not save product. Please try again.";
+    err.style.display = "block";
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+  }
+}
+
+async function deleteProduct(id){
+  if(!confirm("Delete this product? This cannot be undone.")) return;
+  const { error } = await sb.from("products").delete().eq("id", id);
+  if(error){ alert("Could not delete product."); return; }
+  await loadProducts();
+  renderProducts();
+}
+
+/* ============================================================
+   CATEGORIES
+   ============================================================ */
+function renderCategories(){
+  const rows = CATEGORIES.map(c => {
+    const count = PRODUCTS.filter(p => p.category_id === c.id).length;
+    return `
+      <tr>
+        <td><strong>${escapeHtml(c.name)}</strong><br><span style="color:var(--muted);font-size:12px">${escapeHtml(c.slug)}</span></td>
+        <td>${escapeHtml(c.tagline || "—")}</td>
+        <td>${count}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openCategoryModal('${c.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCategory('${c.id}')">Delete</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="pagehead">
+      <h1>Categories</h1>
+      <button class="btn btn-cherry" onclick="openCategoryModal()">+ Add category</button>
+    </div>
+    <div class="card">
+      ${CATEGORIES.length ? `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Tagline</th><th>Products</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty">No categories yet.</div>`}
+    </div>`;
+}
+
+function openCategoryModal(id){
+  const c = id ? CATEGORIES.find(x => x.id === id) : null;
+  document.getElementById("modal-body").innerHTML = `
+    <h2>${c ? "Edit category" : "Add category"}</h2>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="cf-name" value="${c ? escapeHtml(c.name) : ""}" placeholder="e.g. Scrunchies" />
+    </div>
+    <div class="field">
+      <label>URL slug (lowercase, no spaces)</label>
+      <input type="text" id="cf-slug" value="${c ? escapeHtml(c.slug) : ""}" placeholder="e.g. scrunchies" />
+    </div>
+    <div class="field">
+      <label>Tagline</label>
+      <input type="text" id="cf-tagline" value="${c ? escapeHtml(c.tagline||"") : ""}" placeholder="Short description shown on the site" />
+    </div>
+    <div class="err-msg" id="cf-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-cherry" id="cf-save" onclick="saveCategory('${c ? c.id : ""}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+async function saveCategory(id){
+  const name = document.getElementById("cf-name").value.trim();
+  const slug = document.getElementById("cf-slug").value.trim().toLowerCase().replace(/[^a-z0-9-]/g,"-");
+  const tagline = document.getElementById("cf-tagline").value.trim();
+  const err = document.getElementById("cf-err");
+  const saveBtn = document.getElementById("cf-save");
+
+  err.style.display = "none";
+  if(!name || !slug){
+    err.textContent = "Please fill in a name and slug.";
+    err.style.display = "block";
+    return;
+  }
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving…";
+
+  const payload = { name, slug, tagline: tagline || null };
+  let result;
+  if(id){
+    result = await sb.from("categories").update(payload).eq("id", id);
+  }else{
+    payload.sort_order = CATEGORIES.length + 1;
+    result = await sb.from("categories").insert(payload);
+  }
+
+  if(result.error){
+    err.textContent = result.error.message.includes("duplicate") ? "That slug is already used." : "Could not save category.";
+    err.style.display = "block";
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+    return;
+  }
+
+  closeModal();
+  await loadCategories();
+  renderCategories();
+}
+
+async function deleteCategory(id){
+  const count = PRODUCTS.filter(p => p.category_id === id).length;
+  if(count > 0){
+    alert(`This category has ${count} product(s) in it. Move or delete those products first.`);
+    return;
+  }
+  if(!confirm("Delete this category?")) return;
+  const { error } = await sb.from("categories").delete().eq("id", id);
+  if(error){ alert("Could not delete category."); return; }
+  await loadCategories();
+  renderCategories();
+}
+
+/* ============================================================
+   ORDERS
+   ============================================================ */
+const STATUSES = ["pending","confirmed","shipped","completed","cancelled"];
+
+function renderOrders(){
+  const rows = ORDERS.map(o => `
+    <tr>
+      <td><strong>${escapeHtml(o.order_number)}</strong><br><span style="color:var(--muted);font-size:12px">${new Date(o.created_at).toLocaleDateString()}</span></td>
+      <td>${escapeHtml(o.customer_name)}<br><span style="color:var(--muted);font-size:12px">${escapeHtml(o.customer_phone)}</span></td>
+      <td>${money(o.total_amount)}</td>
+      <td><span class="pill pill-${o.status}">${o.status}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openOrderModal('${o.id}')">View</button></td>
+    </tr>`).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="pagehead"><h1>Orders</h1></div>
+    <div class="card">
+      ${ORDERS.length ? `
+        <table class="table">
+          <thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty">No orders yet.</div>`}
+    </div>`;
+}
+
+async function openOrderModal(id){
+  const o = ORDERS.find(x => x.id === id);
+  if(!o) return;
+
+  let receiptHtml = '<p style="color:var(--muted);font-size:13px">No receipt uploaded.</p>';
+  if(o.receipt_path){
+    const { data, error } = await sb.storage.from("payment-receipts").createSignedUrl(o.receipt_path, 3600);
+    if(!error && data){
+      receiptHtml = `<a href="${data.signedUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">View receipt</a>`;
+    }
+  }
+
+  const itemRows = (o.order_items || []).map(i => `
+    <tr><td>${escapeHtml(i.product_name)} × ${i.quantity}</td><td style="text-align:right">${money(i.line_total)}</td></tr>
+  `).join("");
+
+  const statusOptions = STATUSES.map(s => `<option value="${s}" ${o.status===s?"selected":""}>${s}</option>`).join("");
+
+  document.getElementById("modal-body").innerHTML = `
+    <h2>${escapeHtml(o.order_number)}</h2>
+    <div class="order-detail">
+      <p><strong>${escapeHtml(o.customer_name)}</strong> · ${escapeHtml(o.customer_phone)}</p>
+      <p style="color:var(--muted);font-size:13.5px;margin-top:4px">${escapeHtml(o.customer_address)}${o.city ? ", "+escapeHtml(o.city) : ""}</p>
+      <table>
+        ${itemRows}
+        <tr><td style="padding-top:8px">Shipping</td><td style="text-align:right;padding-top:8px">${money(o.shipping_fee)}</td></tr>
+        <tr><td><strong>Total</strong></td><td style="text-align:right"><strong>${money(o.total_amount)}</strong></td></tr>
+      </table>
+      <div style="margin:14px 0">${receiptHtml}</div>
+      <div class="field">
+        <label>Status</label>
+        <select id="of-status">${statusOptions}</select>
+      </div>
+    </div>
+    <div class="err-msg" id="of-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn btn-cherry" onclick="saveOrderStatus('${o.id}')">Update status</button>
+    </div>`;
+  openModal();
+}
+
+async function saveOrderStatus(id){
+  const status = document.getElementById("of-status").value;
+  const { error } = await sb.from("orders").update({ status }).eq("id", id);
+  if(error){
+    document.getElementById("of-err").textContent = "Could not update status.";
+    document.getElementById("of-err").style.display = "block";
+    return;
+  }
+  closeModal();
+  await loadOrders();
+  renderOrders();
+}
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+function renderSettings(){
+  const fields = [
+    ["shop_name", "Shop name"],
+    ["instagram_handle", "Instagram handle"],
+    ["currency", "Currency code"],
+    ["payment_method", "Payment method (e.g. EasyPaisa)"],
+    ["payment_account_name", "Payment account name"],
+    ["payment_account_number", "Payment account number"],
+    ["shipping_islamabad", "Shipping fee — Islamabad"],
+    ["shipping_other", "Shipping fee — rest of Pakistan"]
+  ];
+
+  document.getElementById("main").innerHTML = `
+    <div class="pagehead"><h1>Settings</h1></div>
+    <div class="card">
+      <div class="settings-grid">
+        ${fields.map(([key,label]) => `
+          <div class="field">
+            <label>${label}</label>
+            <input type="text" id="set-${key}" value="${escapeHtml(SETTINGS[key] || "")}" />
+          </div>
+        `).join("")}
+        <div>
+          <button class="btn btn-cherry" onclick="saveSettings()">Save settings</button>
+          <span class="err-msg" id="settings-status" style="display:none;color:var(--ok)"></span>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveSettings(){
+  const fields = ["shop_name","instagram_handle","currency","payment_method","payment_account_name","payment_account_number","shipping_islamabad","shipping_other"];
+  const statusEl = document.getElementById("settings-status");
+  try{
+    for(const key of fields){
+      const value = document.getElementById(`set-${key}`).value.trim();
+      const { error } = await sb.from("shop_settings").upsert({ key, value });
+      if(error) throw error;
+    }
+    await loadSettings();
+    statusEl.textContent = "Saved!";
+    statusEl.style.display = "inline";
+    statusEl.style.color = "var(--ok)";
+    setTimeout(() => statusEl.style.display = "none", 2000);
+  }catch(e){
+    console.error(e);
+    statusEl.textContent = "Could not save settings.";
+    statusEl.style.display = "inline";
+    statusEl.style.color = "var(--cherry2)";
+  }
+}
+
+/* ============================================================
+   MODAL HELPERS
+   ============================================================ */
+function openModal(){ document.getElementById("modal-overlay").classList.add("active"); }
+function closeModal(){ document.getElementById("modal-overlay").classList.remove("active"); }
+document.getElementById("modal-overlay").addEventListener("click", (e) => {
+  if(e.target.id === "modal-overlay") closeModal();
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+checkSession();
+</script>
+</body>
+</html>
