@@ -135,8 +135,9 @@
   @media(max-width:640px){
     /* iOS zooms the whole page in when a focused input is under 16px — this prevents that */
     .field input,.field textarea,.field select,.login-box input{font-size:16px}
-    .overlay{padding:0;align-items:flex-end}
-    .modal{border-radius:18px 18px 0 0;padding:22px 18px;max-height:92vh;overflow-y:auto}
+    .overlay{padding:0;align-items:flex-start;justify-content:center;-webkit-overflow-scrolling:touch}
+    .modal{border-radius:0;padding:20px 18px calc(28px + env(safe-area-inset-bottom));
+      max-width:100%;min-height:100vh;overflow:visible}
     .modal h2{font-size:19px}
     .field-row{flex-direction:column;gap:0}
     .modal-actions{flex-direction:column-reverse;gap:8px}
@@ -712,8 +713,17 @@ async function saveSettings(){
 /* ============================================================
    MODAL HELPERS
    ============================================================ */
-function openModal(){ document.getElementById("modal-overlay").classList.add("active"); }
-function closeModal(){ document.getElementById("modal-overlay").classList.remove("active"); }
+function openModal(){
+  const overlay = document.getElementById("modal-overlay");
+  overlay.classList.add("active");
+  overlay.scrollTop = 0;
+  document.getElementById("modal-body").scrollTop = 0;
+  document.body.style.overflow = "hidden";
+}
+function closeModal(){
+  document.getElementById("modal-overlay").classList.remove("active");
+  document.body.style.overflow = "";
+}
 document.getElementById("modal-overlay").addEventListener("click", (e) => {
   if(e.target.id === "modal-overlay") closeModal();
 });
