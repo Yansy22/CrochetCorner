@@ -180,6 +180,7 @@
       <button data-view="products" onclick="switchView('products')">🧶 Products</button>
       <button data-view="categories" onclick="switchView('categories')">📂 Categories</button>
       <button data-view="orders" onclick="switchView('orders')">📦 Orders</button>
+      <button data-view="shipping" onclick="switchView('shipping')">🚚 Delivery areas</button>
       <button data-view="settings" onclick="switchView('settings')">⚙️ Settings</button>
     </nav>
     <button class="signout" onclick="doLogout()">Sign out</button>
@@ -212,6 +213,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let CATEGORIES = [];
 let PRODUCTS = [];
 let ORDERS = [];
+let ZONES = [];
 let SETTINGS = {};
 let currentView = "products";
 
@@ -271,7 +273,7 @@ sb.auth.onAuthStateChange((event) => {
    DATA LOADING
    ============================================================ */
 async function loadAllData(){
-  await Promise.all([loadCategories(), loadProducts(), loadOrders(), loadSettings()]);
+  await Promise.all([loadCategories(), loadProducts(), loadOrders(), loadZones(), loadSettings()]);
   switchView(currentView);
 }
 async function loadCategories(){
@@ -285,6 +287,10 @@ async function loadProducts(){
 async function loadOrders(){
   const { data, error } = await sb.from("orders").select("*, order_items(*)").order("created_at", { ascending: false });
   if(!error) ORDERS = data;
+}
+async function loadZones(){
+  const { data, error } = await sb.from("shipping_zones").select("*").order("sort_order");
+  if(!error) ZONES = data;
 }
 async function loadSettings(){
   const { data, error } = await sb.from("shop_settings").select("*");
@@ -321,6 +327,7 @@ function switchView(view){
   if(view === "products") renderProducts();
   else if(view === "categories") renderCategories();
   else if(view === "orders") renderOrders();
+  else if(view === "shipping") renderZones();
   else if(view === "settings") renderSettings();
 }
 
@@ -638,6 +645,7 @@ async function openOrderModal(id){
     <div class="order-detail">
       <p><strong>${escapeHtml(o.customer_name)}</strong> · ${escapeHtml(o.customer_phone)}</p>
       <p style="color:var(--muted);font-size:13.5px;margin-top:4px">${escapeHtml(o.customer_address)}${o.city ? ", "+escapeHtml(o.city) : ""}</p>
+      <p style="color:var(--muted);font-size:13px;margin-top:4px">Area: ${escapeHtml(o.shipping_zone_name || "—")}</p>
       <table>
         ${itemRows}
         <tr><td style="padding-top:8px">Shipping</td><td style="text-align:right;padding-top:8px">${money(o.shipping_fee)}</td></tr>
@@ -671,6 +679,109 @@ async function saveOrderStatus(id){
 }
 
 /* ============================================================
+   SHIPPING ZONES
+   ============================================================ */
+function renderZones(){
+  const rows = ZONES.map(z => `
+    <tr>
+      <td class="cell-title"><strong>${escapeHtml(z.name)}</strong>${z.note?`<br><span style="color:var(--muted);font-size:12px">${escapeHtml(z.note)}</span>`:""}</td>
+      <td>${money(z.fee)}</td>
+      <td><span class="pill ${z.is_active?"pill-instock":"pill-oos"}">${z.is_active?"Active":"Paused"}</span></td>
+      <td class="cell-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openZoneModal('${z.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteZone('${z.id}')">Delete</button>
+      </td>
+    </tr>`).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="pagehead">
+      <h1>Delivery areas</h1>
+      <button class="btn btn-cherry" onclick="openZoneModal()">+ Add area</button>
+    </div>
+    <div class="card" style="background:var(--cream);border:none;font-size:13.5px">
+      Customers pick one of these at checkout and its fee is added to their total.
+      Pausing an area hides it from checkout without deleting it.
+    </div>
+    <div class="card">
+      ${ZONES.length ? `
+        <table class="table">
+          <thead><tr><th>Area</th><th>Fee</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty">No delivery areas yet — add one so customers can check out.</div>`}
+    </div>`;
+}
+
+function openZoneModal(id){
+  const z = id ? ZONES.find(x => x.id === id) : null;
+  document.getElementById("modal-body").innerHTML = `
+    <h2>${z ? "Edit delivery area" : "Add delivery area"}</h2>
+    <div class="field">
+      <label>Area name</label>
+      <input type="text" id="zf-name" value="${z ? escapeHtml(z.name) : ""}" placeholder="e.g. Islamabad / Rawalpindi" />
+    </div>
+    <div class="field">
+      <label>Delivery fee (${escapeHtml(SETTINGS.currency || "PKR")})</label>
+      <input type="number" id="zf-fee" min="0" step="1" value="${z ? z.fee : ""}" />
+    </div>
+    <div class="field">
+      <label>Note (optional)</label>
+      <input type="text" id="zf-note" value="${z && z.note ? escapeHtml(z.note) : ""}" placeholder="2–3 days" />
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="zf-active" ${!z || z.is_active ? "checked" : ""} />
+      <label style="margin:0;text-transform:none;font-weight:500;font-size:14px" for="zf-active">Show at checkout</label>
+    </div>
+    <div class="err-msg" id="zf-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-cherry" id="zf-save" onclick="saveZone('${z ? z.id : ""}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+async function saveZone(id){
+  const name = document.getElementById("zf-name").value.trim();
+  const fee = parseFloat(document.getElementById("zf-fee").value);
+  const note = document.getElementById("zf-note").value.trim();
+  const active = document.getElementById("zf-active").checked;
+  const err = document.getElementById("zf-err");
+  const btn = document.getElementById("zf-save");
+
+  err.style.display = "none";
+  if(!name || isNaN(fee) || fee < 0){
+    err.textContent = "Please enter an area name and a valid fee.";
+    err.style.display = "block";
+    return;
+  }
+  btn.disabled = true; btn.textContent = "Saving…";
+
+  const payload = { name, fee, note: note || null, is_active: active };
+  const r = id
+    ? await sb.from("shipping_zones").update(payload).eq("id", id)
+    : await sb.from("shipping_zones").insert({ ...payload, sort_order: ZONES.length + 1 });
+
+  if(r.error){
+    err.textContent = String(r.error.message || "").includes("duplicate")
+      ? "An area with that name already exists." : "Could not save.";
+    err.style.display = "block";
+    btn.disabled = false; btn.textContent = "Save";
+    return;
+  }
+  closeModal();
+  await loadZones();
+  renderZones();
+}
+
+async function deleteZone(id){
+  if(!confirm("Delete this delivery area? Past orders keep the area name they were placed with.")) return;
+  const { error } = await sb.from("shipping_zones").delete().eq("id", id);
+  if(error){ alert("Could not delete."); return; }
+  await loadZones();
+  renderZones();
+}
+
+/* ============================================================
    SETTINGS
    ============================================================ */
 function renderSettings(){
@@ -681,8 +792,6 @@ function renderSettings(){
     ["payment_method", "Payment method (e.g. EasyPaisa)"],
     ["payment_account_name", "Payment account name"],
     ["payment_account_number", "Payment account number"],
-    ["shipping_islamabad", "Shipping fee — Islamabad"],
-    ["shipping_other", "Shipping fee — rest of Pakistan"]
   ];
 
   document.getElementById("main").innerHTML = `
@@ -704,7 +813,7 @@ function renderSettings(){
 }
 
 async function saveSettings(){
-  const fields = ["shop_name","instagram_handle","currency","payment_method","payment_account_name","payment_account_number","shipping_islamabad","shipping_other"];
+  const fields = ["shop_name","instagram_handle","currency","payment_method","payment_account_name","payment_account_number"];
   const statusEl = document.getElementById("settings-status");
   try{
     for(const key of fields){
