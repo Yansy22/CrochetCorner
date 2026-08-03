@@ -208,7 +208,7 @@
     <div id="home-sections"><div class="loading">Loading…</div></div>
 
     <div class="banner">
-      <div class="art"><img src="" alt="" id="banner-img"></div>
+      <div class="art"></div>
       <div class="copy">
         <span class="script">just for you</span>
         <h3>Custom orders welcome</h3>
@@ -342,16 +342,6 @@ function applyBrandSettings(){
     heroImg.alt = BRAND.heroImageAlt;
   }
   document.getElementById("hero-tag").textContent = BRAND.heroTag;
-// 배너 이미지: 사진 있는 상품 중 두 번째(없으면 첫 번째)를 자동으로 사용
-  const withImages = PRODUCTS.filter(p => p.image_path);
-  const bannerImg = document.getElementById("banner-img");
-  const bannerSource = withImages[1] || withImages[0];
-  if(bannerSource){
-    bannerImg.src = imgUrl(bannerSource.image_path);
-    bannerImg.alt = "Custom crochet";
-  }else{
-    bannerImg.style.display = "none";
-  }
 }
 
 /* ============================================================
