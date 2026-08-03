@@ -809,6 +809,27 @@ function renderSettings(){
           <span class="err-msg" id="settings-status" style="display:none;color:var(--ok)"></span>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-family:'Playfair Display',serif;font-weight:500;font-size:19px;margin-bottom:6px">Change password</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+        Only you can see this dashboard. If you were given a starting password, change it here.
+      </p>
+      <div class="settings-grid">
+        <div class="field">
+          <label>New password</label>
+          <input type="password" id="pw-new" placeholder="At least 8 characters" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label>Repeat new password</label>
+          <input type="password" id="pw-again" autocomplete="new-password" />
+        </div>
+        <div>
+          <button class="btn btn-cherry" id="pw-save" onclick="changePassword()">Update password</button>
+          <span class="err-msg" id="pw-status" style="display:none"></span>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -832,6 +853,44 @@ async function saveSettings(){
     statusEl.style.display = "inline";
     statusEl.style.color = "var(--cherry2)";
   }
+}
+
+/* ============================================================
+   PASSWORD
+   ============================================================ */
+async function changePassword(){
+  const pw = document.getElementById("pw-new").value;
+  const again = document.getElementById("pw-again").value;
+  const status = document.getElementById("pw-status");
+  const btn = document.getElementById("pw-save");
+
+  const fail = (msg) => {
+    status.textContent = msg;
+    status.style.color = "var(--cherry2)";
+    status.style.display = "inline";
+  };
+
+  status.style.display = "none";
+  if(!pw || !again) return fail("Please fill in both boxes.");
+  if(pw.length < 8) return fail("Please use at least 8 characters.");
+  if(pw !== again) return fail("The two passwords don't match.");
+
+  btn.disabled = true;
+  btn.textContent = "Updating…";
+  const { error } = await sb.auth.updateUser({ password: pw });
+  btn.disabled = false;
+  btn.textContent = "Update password";
+
+  if(error){
+    console.error(error);
+    return fail("Could not update password. Please try again.");
+  }
+
+  document.getElementById("pw-new").value = "";
+  document.getElementById("pw-again").value = "";
+  status.textContent = "Password updated — use it next time you sign in.";
+  status.style.color = "var(--ok)";
+  status.style.display = "inline";
 }
 
 /* ============================================================
