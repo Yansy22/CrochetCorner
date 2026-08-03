@@ -81,11 +81,10 @@
   .card .pr{font-size:15px;font-weight:600;color:var(--cherry);margin-bottom:3px}
   .card .sub{font-size:12.5px;color:var(--muted)}
 
-  /* custom banner */
+  /* custom orders band — colour block, no photo */
   .banner{display:grid;grid-template-columns:1fr;margin:44px 0 0}
   @media(min-width:900px){.banner{grid-template-columns:1fr 1fr}}
-  .banner .art{height:340px;background:var(--soft);overflow:hidden}
-  .banner .art img{width:100%;height:100%;object-fit:cover}
+  .banner .art{height:300px;background:var(--soft)}
   .banner .copy{display:flex;flex-direction:column;justify-content:center;padding:60px 46px;background:var(--cream)}
   .banner .copy .script{font-family:"Playfair Display",serif;font-style:italic;color:var(--pink);font-size:20px;margin-bottom:4px}
   .banner .copy h3{font-family:"Playfair Display",serif;font-weight:500;font-size:clamp(28px,4vw,40px);margin-bottom:14px}
@@ -154,8 +153,8 @@
   .checkout-body{padding:24px}
   .field{margin-bottom:16px}
   .field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
-  .field input,.field textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:11px 14px;font:inherit;font-size:14.5px;color:var(--ink)}
-  .field input:focus,.field textarea:focus{outline:2px solid var(--pink);outline-offset:1px}
+  .field input,.field textarea,.field select{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:11px 14px;font:inherit;font-size:14.5px;color:var(--ink);background:#fff}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:2px solid var(--pink);outline-offset:1px}
   .field textarea{resize:vertical;min-height:70px}
   .pay-box{background:var(--cream);border-radius:14px;padding:18px;margin:20px 0;font-size:13.5px;color:var(--ink)}
   .pay-box b{color:var(--cherry)}
@@ -169,12 +168,12 @@
 
   @media(max-width:640px){
     /* iOS zooms the page in when a focused input is under 16px */
-    .field input,.field textarea{font-size:16px}
+    .field input,.field textarea,.field select{font-size:16px}
     .head{padding:14px 18px}
     .head .brand{font-size:21px}
     .hero .copy{padding:44px 22px}
     .banner .copy{padding:44px 22px}
-    .banner .art{height:230px}
+    .banner .art{height:170px}
     .home-cat{padding:36px 18px 10px}
     .catpage{padding:28px 18px 50px}
     .checkout-body{padding:20px 18px}
@@ -262,8 +261,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
    ============================================================ */
 const BRAND = {
   heroImageAlt: "Pom scrunchies",
-  heroTag: "Pom scrunchies",
-  bannerImagePath: null // optional: set an image_path from product-images bucket for the custom-order banner
+  heroTag: "Pom scrunchies"
 };
 
 /* ============================================================
@@ -271,6 +269,7 @@ const BRAND = {
    ============================================================ */
 let CATEGORIES = [];   // [{id, slug, name, tagline, sort_order}]
 let PRODUCTS = [];      // [{id, category_id, name, description, price, image_path, badge, in_stock}]
+let ZONES = [];         // [{id, name, fee, is_active}]
 let SETTINGS = {};       // { key: value }
 let CART = [];           // [{product_id, name, price, image_url, quantity}]
 
@@ -304,10 +303,11 @@ function money(n){
    DATA LOADING
    ============================================================ */
 async function loadAll(){
-  const [{data: cats, error: catErr}, {data: prods, error: prodErr}, {data: settings, error: setErr}] = await Promise.all([
+  const [{data: cats, error: catErr}, {data: prods, error: prodErr}, {data: settings, error: setErr}, {data: zones}] = await Promise.all([
     sb.from("categories").select("*").order("sort_order"),
     sb.from("products").select("*").order("sort_order"),
-    sb.from("shop_settings").select("*")
+    sb.from("shop_settings").select("*"),
+    sb.from("shipping_zones").select("*").eq("is_active", true).order("sort_order")
   ]);
 
   if(catErr || prodErr || setErr){
@@ -319,6 +319,7 @@ async function loadAll(){
 
   CATEGORIES = cats || [];
   PRODUCTS = prods || [];
+  ZONES = zones || [];
   SETTINGS = {};
   (settings || []).forEach(s => SETTINGS[s.key] = s.value);
 
@@ -340,8 +341,12 @@ function applyBrandSettings(){
   if(firstProductWithImage){
     heroImg.src = imgUrl(firstProductWithImage.image_path);
     heroImg.alt = BRAND.heroImageAlt;
+    heroImg.style.display = "";
+  }else{
+    // no photos uploaded yet — hide the tag rather than show a broken image
+    heroImg.style.display = "none";
   }
-  document.getElementById("hero-tag").textContent = BRAND.heroTag;
+  document.getElementById("hero-tag").textContent = firstProductWithImage ? BRAND.heroTag : "";
 }
 
 /* ============================================================
@@ -569,6 +574,9 @@ function closeCheckout(){
 
 function renderCheckoutForm(){
   const subtotal = cartSubtotal();
+  const zoneOpts = ZONES.map(z =>
+    `<option value="${z.id}">${escapeHtml(z.name)} — ${money(z.fee)}</option>`).join("");
+
   document.getElementById("checkout-modal").innerHTML = `
     <div class="mbody" style="padding:0">
       <div class="checkout-body">
@@ -584,7 +592,14 @@ function renderCheckoutForm(){
           <input id="ck-phone" type="tel" placeholder="03xx-xxxxxxx" />
         </div>
         <div class="field">
-          <label>City</label>
+          <label>Delivery area</label>
+          <select id="ck-zone" onchange="updateTotals()">
+            <option value="">Choose your area…</option>
+            ${zoneOpts}
+          </select>
+        </div>
+        <div class="field">
+          <label>City / town</label>
           <input id="ck-city" type="text" placeholder="e.g. Islamabad" />
         </div>
         <div class="field">
@@ -599,8 +614,16 @@ function renderCheckoutForm(){
           <input id="ck-receipt" type="file" accept="image/*,application/pdf" />
         </div>
 
-        <div class="row" style="display:flex;justify-content:space-between;margin-bottom:16px">
-          <span>Subtotal</span><strong>${money(subtotal)}</strong>
+        <div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:16px">
+          <div class="row" style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Subtotal</span><span>${money(subtotal)}</span>
+          </div>
+          <div class="row" style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Delivery</span><span id="ck-ship">—</span>
+          </div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:16px">
+            <strong>Total</strong><strong id="ck-total">${money(subtotal)}</strong>
+          </div>
         </div>
 
         <button class="btn-primary" style="width:100%" id="ck-submit" onclick="submitOrder()">Place order</button>
@@ -612,9 +635,28 @@ function renderCheckoutForm(){
   const acctName = SETTINGS.payment_account_name || "";
   const acctNum = SETTINGS.payment_account_number || "";
   document.getElementById("pay-box").innerHTML = `
-    Please send payment via <b>${escapeHtml(method)}</b>${acctNum ? ` to <b>${escapeHtml(acctNum)}</b>` : ""}${acctName ? ` (${escapeHtml(acctName)})` : ""}.
-    Shipping is <b>${money(SETTINGS.shipping_islamabad || 0)}</b> in Islamabad, <b>${money(SETTINGS.shipping_other || 0)}</b> elsewhere in Pakistan — added after checkout.
+    Please send payment via <b>${escapeHtml(method)}</b>${acctNum ? ` to <b>${escapeHtml(acctNum)}</b>` : ""}${acctName ? ` (${escapeHtml(acctName)})` : ""},
+    then upload your receipt below or send it to us on Instagram.
   `;
+
+  if(ZONES.length === 0){
+    const err = document.getElementById("ck-err");
+    err.textContent = "Delivery areas aren't set up yet — please message us on Instagram to order.";
+    err.style.display = "block";
+  }
+}
+
+function selectedZone(){
+  const sel = document.getElementById("ck-zone");
+  if(!sel || !sel.value) return null;
+  return ZONES.find(z => z.id === sel.value) || null;
+}
+
+function updateTotals(){
+  const z = selectedZone();
+  const fee = z ? Number(z.fee) : 0;
+  document.getElementById("ck-ship").textContent = z ? money(fee) : "—";
+  document.getElementById("ck-total").textContent = money(cartSubtotal() + fee);
 }
 
 async function submitOrder(){
@@ -623,12 +665,18 @@ async function submitOrder(){
   const city = document.getElementById("ck-city").value.trim();
   const address = document.getElementById("ck-address").value.trim();
   const receiptFile = document.getElementById("ck-receipt").files[0];
+  const zone = selectedZone();
   const errEl = document.getElementById("ck-err");
   const submitBtn = document.getElementById("ck-submit");
 
   errEl.style.display = "none";
   if(!name || !phone || !address){
     errEl.textContent = "Please fill in your name, phone, and address.";
+    errEl.style.display = "block";
+    return;
+  }
+  if(!zone){
+    errEl.textContent = "Please choose your delivery area.";
     errEl.style.display = "block";
     return;
   }
@@ -643,6 +691,7 @@ async function submitOrder(){
       p_customer_phone: phone,
       p_customer_address: address,
       p_city: city,
+      p_zone_id: zone.id,
       p_items: items
     });
 
